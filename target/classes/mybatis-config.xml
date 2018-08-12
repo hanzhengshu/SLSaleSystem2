@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE configuration PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-config.dtd">
+<configuration>
+	<!-- 打开延迟加载的开关 -->
+	<settings>
+		<setting name="lazyLoadingEnabled" value="false" />
+	</settings>
+	<typeAliases>
+		<!-- 实体类取别名，方便在mapper中使用  package配置是整体取别名,如果下面的类为User别名则为user(小写)   也可以一个一个配置 -->
+		<package name="org.slsale.pojo"/>
+	</typeAliases>
+
+</configuration>
+

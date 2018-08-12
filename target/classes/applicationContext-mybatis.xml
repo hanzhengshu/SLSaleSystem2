@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>  
+	<beans xmlns="http://www.springframework.org/schema/beans"
+		xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		xmlns:aop="http://www.springframework.org/schema/aop"
+		xmlns:p="http://www.springframework.org/schema/p"
+		xmlns:tx="http://www.springframework.org/schema/tx"
+		xmlns:context="http://www.springframework.org/schema/context"
+		xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.3.xsd
+							http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.3.xsd
+							http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-4.3.xsd
+							http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-4.3.xsd">
+
+      <!-- 读取JDBC的配置文件 -->
+      <context:property-placeholder location="classpath:jdbc.properties"/>
+      
+      <!-- JNDI获取数据源（dbcp连接池）											当这个bean销毁时执行close方法   scope设置为单例模式-->
+      <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource" destroy-method="close" scope="singleton">
+      	<property name="driverClassName" value="${driverClassName}"/>
+      	<property name="url" value="${url}"/>
+      	<property name="username" value="${uname}"/>
+      	<property name="password" value="${password}"/>
+      	<!--initialSize 数据库连接池在初始化时第一次要创建连接的个数 默认为0-->
+      	<property name="initialSize" value="${initialSize}"/>
+      	<!-- 连接池中同时的最大连接数  默认为8 -->
+      	<property name="maxActive" value="${maxActive}"/>
+      	<!-- 最大空闲数(配置不能太小)  -->
+      	<property name="maxIdle" value="${maxIdle}"/>
+      	<!-- 最小空闲数  默认为0 值越接近maxIdle性能越好-->
+      	<property name="minIdle" value="${minIdle}"/>
+      	<!-- 时间数 -->
+      	<property name="maxWait" value="${maxWait}"/>
+      	<!-- 当前空闲连接数< 2 && (当前活动数>最大活动数-3) 触发回收-->
+      	<property name="removeAbandoned" value="${removeAbandoned}"/>
+      	<!-- 可以控制连接池在超出控制时间之后回收没有用的链接 -->
+      	<property name="removeAbandonedTimeout" value="${removeAbandonedTimeout}"/>
+      	<!-- sql心跳 ：保证连接池中连接是真实有效的连接-->
+      	<!-- testWhileIdle testOnBorrow testOnReturn 
+      	validationQuery-select 1
+      	 -->
+      	<!-- 开启Evict的定时校验，循环校验 -->
+      	<property name="testWhileIdle" value="true"/>
+      	<!-- 定义Evict的时间间隔，单位：毫秒，大于0才会开启evict -->
+      	<property name="timeBetweenEvictionRunsMillis" value="60000"/>
+      	<!-- 在进行borrowObject处理时，会对拿到的连接进行校验-false不校验 -->
+      	<property name="testOnBorrow" value="false"/>
+      	<!-- 在进行returnObject处理时，会对返回的连接进行校验-false不校验 -->
+      	<property name="testOnReturn" value="false"/>
+      	<!-- 校验使用的sql语句，validationQuery，复杂的校验sql会影响性能 -->
+      	<property name="validationQuery" value="select 1"/>
+      	<!-- 配置每次校验连接的数量，一般等于maxActive -->
+      	<property name="numTestsPerEvictionRun" value="${maxActive}"/>
+      </bean> 
+      
+      <!-- 事务管理 -->
+      <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+      	<property name="dataSource" ref="dataSource"/>
+      </bean>
+      <!-- 配置mybatis sqlSessionFactoryBean -->
+      <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+      	<property name="dataSource" ref="dataSource"/>
+      	<property name="configLocation" value="classpath:mybatis-config.xml"/>
+      </bean>
+      <!-- AOP事务处理     (自动代理模式)  -->
+      <aop:aspectj-autoproxy/>
+      <aop:config proxy-target-class="true">
+      	<aop:pointcut expression="execution(* *org.slsale.service..*(..))" id="transService"/>
+      	<aop:advisor advice-ref="txAdvice" pointcut-ref="transService"/>
+      </aop:config>
+      <!-- txAdvice:需要定义事务管理器，进行事务处理			需要处理上面配置的事务管理->bean的id -->
+      <tx:advice id="txAdvice"  transaction-manager="transactionManager">
+      	<tx:attributes><!-- 以hl*开始的都需要事务管理       propagation="REQUIRED"都处理当然也有都不处理-->
+      		<tx:method name="hl*" propagation="REQUIRED" rollback-for="Exception"/>
+      	</tx:attributes>
+      </tx:advice>
+      
+      <!-- mapper 接口所在包名，spring会自动查找其下的Mapper -->
+      <bean class=" org.mybatis.spring.mapper.MapperScannerConfigurer">
+      	<property name="basePackage" value="org.slsale.dao"/>
+      	
+      </bean>
+      
+      <!-- redis配置  通过查询Spring-data-redis的官网，发现高版本SDR的maxWait属性和maxActive属性已经修改成maxWaitMillis和maxTotal -->
+	  <bean id="jedisPoolConfig" class="redis.clients.jedis.JedisPoolConfig">
+	        <property  name="maxTotal"  value="90" />   <!--最大连接数 -->
+	        <property  name="maxIdle"   value="5" />  	<!--最大空闲连接数 -->
+	        <property  name="maxWaitMillis"  value="1000" />  <!--最大等待时间 --> 
+	        <property  name="testOnBorrow"  value="true" /> <!--定时对线程池中空闲的链接进行validateObject校验 -->
+	    </bean>
+      <!-- 教材此处有问题:端口号和ip需要指定数据类型 -->
+      <bean id="jedisPool" class="redis.clients.jedis.JedisPool" destroy-method="destroy">
+      	<constructor-arg index="0" ref="jedisPoolConfig"/>
+      	<constructor-arg index="1" value="127.0.0.1" type="java.lang.String"/>
+      	<constructor-arg index="2" value="6379" type="int"/>
+      </bean>
+	  <bean id="redisAPI" class="org.slsale.common.RedisAPI">
+	     <property name="jedisPool" ref="jedisPool"/>
+	  </bean>
+
+
+
+</beans>
